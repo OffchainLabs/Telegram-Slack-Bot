@@ -3,12 +3,13 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import asyncio
 import os
+import sys
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
-# Telegram Credentials (loaded from environment variables)
+# Telegram Credentials
 TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
 TELEGRAM_SESSION_NAME = "my_account"
@@ -16,7 +17,7 @@ TELEGRAM_SESSION_NAME = "my_account"
 # Slack Credentials
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
-# Channels
+# Channels (Loaded from .env file, separated by commas)
 TELEGRAM_CHANNELS = os.getenv("TELEGRAM_CHANNELS", "").split(",")
 SLACK_CHANNELS = os.getenv("SLACK_CHANNELS", "").split(",")
 
@@ -45,7 +46,11 @@ async def send_message_to_all(message):
     await send_message_telegram(message)
     send_message_slack(message)
 
-# Example usage
 if __name__ == "__main__":
-    message_text = "Hello! This is a test message sent to both Telegram & Slack."
+    # Check if message is passed as a command-line argument
+    if len(sys.argv) > 1:
+        message_text = sys.argv[1]
+    else:
+        message_text = input("Enter the message to send: ")
+
     asyncio.run(send_message_to_all(message_text))
