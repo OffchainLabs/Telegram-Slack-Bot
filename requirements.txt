@@ -1,0 +1,4 @@
+telethon
+slack_sdk
+python-dotenv
+asyncio
