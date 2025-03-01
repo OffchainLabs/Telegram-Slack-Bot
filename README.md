@@ -1,18 +1,30 @@
-# Telegram & Slack Messenger Bot 🚀
+# Telegram Slack Bot 🚀
 
 This script allows you to send messages to multiple Telegram and Slack channels at once.
 
 ## Features
-✅ Send messages to multiple Telegram channels  
+✅ Send messages to multiple Telegram channels and Telegram groups
 ✅ Send messages to multiple Slack channels  
+✅ Send image with your message
 ✅ Uses your **Telegram account** (not a bot)  
 ✅ Secure API credentials with `.env` file  
 
-## Installation
+## Installation and Use
 1. Clone this repo
 2. Install requirements:
    ```bash
    pip install -r requirements.txt 
    ```
-3. Copy ```config.env.copy``` file and remove ```.copy```
-4. Add ```TELEGRAM_API_ID```, ```TELEGRAM_API_HASH```,```SLACK_BOT_TOKEN```, ```TELEGRAM_CHANNELS```, and ```SLACK_CHANNELS``` to the config.env file
+3. Copy ```config.env``` file and remove ```config``` from the file name
+4. Add ```TELEGRAM_API_ID```, ```TELEGRAM_API_HASH```,```SLACK_BOT_TOKEN```, ```TELEGRAM_CHANNELS```, and ```SLACK_CHANNELS``` to the ```.env``` file. Also add name of the Telegram groups you want to send messages in ```TELEGRAM_GROUPS``` in ```.env``` file seprating them with ```,``` without spaces between group names.
+5. Run the script with this command:
+   ```bash
+   python main.py   
+    ```
+6. Write the message you want to send after seeing this message on terminal ```Enter the message to send:```
+7. Answer ```y``` to ```Send to Telegram? (y/n): ``` if you want to send to Telegram
+8. Answer ```y``` to ```Send to Slack? (y/n): ``` if you want to send to Slack
+9. Answer ```y``` to ```Do you want to send an image? (y/n): ``` if you want to send an image with your message
+10. If you decided to send an image, drop the image in your terminal after this message otherwise skip: ```Enter image file path (or press Enter to skip): ```
+11. Done with message: ✅ Message sent to ... 🎉
+
