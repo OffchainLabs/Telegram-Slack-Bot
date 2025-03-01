@@ -17,8 +17,9 @@ TELEGRAM_SESSION_NAME = "my_account"
 # Slack Credentials
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
-# Channels (Loaded from .env file, separated by commas)
+# Channels and Groups (Loaded from .env file, separated by commas)
 TELEGRAM_CHANNELS = os.getenv("TELEGRAM_CHANNELS", "").split(",") if os.getenv("TELEGRAM_CHANNELS") else []
+TELEGRAM_GROUPS = os.getenv("TELEGRAM_GROUPS", "").split(",") if os.getenv("TELEGRAM_GROUPS") else []
 SLACK_CHANNELS = os.getenv("SLACK_CHANNELS", "").split(",") if os.getenv("SLACK_CHANNELS") else []
 
 def get_image_path():
@@ -32,26 +33,39 @@ def get_image_path():
             return get_image_path()  # Ask again if file does not exist
     return image_path if image_path else None
 
+async def get_group_ids(client):
+    """ Converts group names into group IDs for private groups. """
+    group_ids = []
+    async for dialog in client.iter_dialogs():
+        if dialog.is_group and dialog.name in TELEGRAM_GROUPS:
+            group_ids.append(dialog.id)
+    return group_ids
+
 async def send_message_telegram(message, image_path=None):
-    """ Sends a message (and optional image) to Telegram channels. """
+    """ Sends a message (and optional image) to Telegram channels and groups. """
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
         print("⚠️ Telegram API credentials are missing! Skipping Telegram messages.")
         return
-    if not TELEGRAM_CHANNELS:
-        print("⚠️ No Telegram channels specified! Skipping Telegram messages.")
+    if not TELEGRAM_CHANNELS and not TELEGRAM_GROUPS:
+        print("⚠️ No Telegram channels or groups specified! Skipping Telegram messages.")
         return
     
     async with TelegramClient(TELEGRAM_SESSION_NAME, TELEGRAM_API_ID, TELEGRAM_API_HASH) as client:
-        for channel in TELEGRAM_CHANNELS:
+        group_ids = await get_group_ids(client)
+
+        # Combine channels and private group IDs
+        recipients = TELEGRAM_CHANNELS + group_ids
+
+        for recipient in recipients:
             try:
                 if image_path:
-                    await client.send_file(channel, image_path, caption=message)
-                    print(f"✅ Image + message sent to Telegram {channel}")
+                    await client.send_file(recipient, image_path, caption=message)
+                    print(f"✅ Image + message sent to Telegram {recipient}")
                 else:
-                    await client.send_message(channel, message)
-                    print(f"✅ Message sent to Telegram {channel}")
+                    await client.send_message(recipient, message)
+                    print(f"✅ Message sent to Telegram {recipient}")
             except Exception as e:
-                print(f"❌ Failed to send message to Telegram {channel}: {e}")
+                print(f"❌ Failed to send message to Telegram {recipient}: {e}")
 
 def send_message_slack(message, image_path=None):
     """ Sends a message (and optional image) to Slack channels. """

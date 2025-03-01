@@ -1,6 +1,7 @@
-*.env
+.env
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 my_account.session
+my_account.session-journal
