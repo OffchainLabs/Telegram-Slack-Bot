@@ -21,10 +21,11 @@ This script allows you to send messages to multiple Telegram and Slack channels 
    ```bash
    python main.py   
     ```
-6. Write the message you want to send after seeing this message on terminal ```Enter the message to send:```
-7. Answer ```y``` to ```Send to Telegram? (y/n): ``` if you want to send to Telegram
-8. Answer ```y``` to ```Send to Slack? (y/n): ``` if you want to send to Slack
-9. Answer ```y``` to ```Do you want to send an image? (y/n): ``` if you want to send an image with your message
-10. If you decided to send an image, drop the image in your terminal after this message otherwise skip: ```Enter image file path (or press Enter to skip): ```
-11. Done with message: ✅ Message sent to ... 🎉
+6. Write message you want to send on a ```txt``` file.
+7. Drag the ```.txt``` file in the terminal when you see the message ```Enter the message file path (or press Enter to type manually):```
+8. Answer ```y``` to ```Send to Telegram? (y/n): ``` if you want to send to Telegram
+9. Answer ```y``` to ```Send to Slack? (y/n): ``` if you want to send to Slack
+10. Answer ```y``` to ```Do you want to send an image? (y/n): ``` if you want to send an image with your message
+11. If you decided to send an image, drop the image in your terminal after this message otherwise skip: ```Enter image file path (or press Enter to skip): ```
+12. Done with message: ✅ Message sent to ... 🎉
 
