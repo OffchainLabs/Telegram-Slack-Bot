@@ -22,6 +22,23 @@ TELEGRAM_CHANNELS = os.getenv("TELEGRAM_CHANNELS", "").split(",") if os.getenv("
 TELEGRAM_GROUPS = os.getenv("TELEGRAM_GROUPS", "").split(",") if os.getenv("TELEGRAM_GROUPS") else []
 SLACK_CHANNELS = os.getenv("SLACK_CHANNELS", "").split(",") if os.getenv("SLACK_CHANNELS") else []
 
+def read_message_from_file():
+    """ Ask user for a text file and read its content. """
+    file_path = input("Enter the message file path (or press Enter to type manually): ").strip()
+
+    # Remove unnecessary surrounding quotes (single or double)
+    if file_path.startswith(("'", '"')) and file_path.endswith(("'", '"')):
+        file_path = file_path[1:-1]
+
+    if file_path:
+        if not os.path.exists(file_path):
+            print(f"⚠️ File not found: {file_path}. Please enter a valid file path.")
+            return read_message_from_file()  # Ask again if file does not exist
+        with open(file_path, "r", encoding="utf-8") as file:
+            return file.read().strip()  # Read full content and remove extra spaces
+    else:
+        return input("Enter the message to send: ")  # Fallback to manual entry
+
 def get_image_path():
     """ Ask user for the image file path and process it correctly to handle spaces and special characters. """
     image_path = input("Enter image file path (or press Enter to skip): ").strip().strip('"').strip("'")  # Remove surrounding quotes
@@ -96,11 +113,8 @@ async def send_message_to_all(message, image_path=None, send_to_telegram=True, s
         send_message_slack(message, image_path)
 
 if __name__ == "__main__":
-    # Check if message is passed as a command-line argument
-    if len(sys.argv) > 1:
-        message_text = sys.argv[1]
-    else:
-        message_text = input("Enter the message to send: ")
+    # Get message from file or manual input
+    message_text = read_message_from_file()
 
     # Ask user where to send the message
     send_to_telegram = input("Send to Telegram? (y/n): ").strip().lower() == "y"
