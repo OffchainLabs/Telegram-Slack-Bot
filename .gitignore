@@ -5,3 +5,4 @@ __pycache__/
 *.pyd
 my_account.session
 my_account.session-journal
+*.session
