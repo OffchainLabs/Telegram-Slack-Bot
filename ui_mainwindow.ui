@@ -85,6 +85,9 @@
       <height>31</height>
      </rect>
     </property>
+    <property name="echoMode">
+     <enum>QLineEdit::EchoMode::Password</enum>
+    </property>
    </widget>
    <widget class="QLineEdit" name="telegramApiHashInput">
     <property name="geometry">
@@ -95,6 +98,9 @@
       <height>31</height>
      </rect>
     </property>
+    <property name="echoMode">
+     <enum>QLineEdit::EchoMode::Password</enum>
+    </property>
    </widget>
    <widget class="QLineEdit" name="slackBotTokenInput">
     <property name="geometry">
@@ -104,6 +110,9 @@
       <width>161</width>
       <height>31</height>
      </rect>
+    </property>
+    <property name="echoMode">
+     <enum>QLineEdit::EchoMode::Password</enum>
     </property>
    </widget>
    <widget class="QTextEdit" name="telegramChannelsInput">

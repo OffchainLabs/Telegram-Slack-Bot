@@ -1,4 +1,4 @@
-# Form implementation generated from reading ui file 'ui_mainwindow2.ui'
+# Form implementation generated from reading ui file 'ui_mainwindow.ui'
 #
 # Created by: PyQt6 UI code generator 6.8.1
 #
@@ -32,12 +32,15 @@ class Ui_MainWindow(object):
         self.label.setObjectName("label")
         self.telegramApiIdInput = QtWidgets.QLineEdit(parent=self.centralwidget)
         self.telegramApiIdInput.setGeometry(QtCore.QRect(100, 0, 161, 31))
+        self.telegramApiIdInput.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.telegramApiIdInput.setObjectName("telegramApiIdInput")
         self.telegramApiHashInput = QtWidgets.QLineEdit(parent=self.centralwidget)
         self.telegramApiHashInput.setGeometry(QtCore.QRect(100, 40, 161, 31))
+        self.telegramApiHashInput.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.telegramApiHashInput.setObjectName("telegramApiHashInput")
         self.slackBotTokenInput = QtWidgets.QLineEdit(parent=self.centralwidget)
         self.slackBotTokenInput.setGeometry(QtCore.QRect(100, 90, 161, 31))
+        self.slackBotTokenInput.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.slackBotTokenInput.setObjectName("slackBotTokenInput")
         self.telegramChannelsInput = QtWidgets.QTextEdit(parent=self.centralwidget)
         self.telegramChannelsInput.setGeometry(QtCore.QRect(80, 150, 231, 91))
