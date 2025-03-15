@@ -5,3 +5,7 @@ PyQt6
 PyQt6-tools
 PyQt6-sip
 requests
+certifi
+idna
+charset-normalizer
+urllib3
