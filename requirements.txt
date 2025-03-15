@@ -1,4 +1,7 @@
 telethon
 slack_sdk
 python-dotenv
-asyncio
+PyQt6
+PyQt6-tools
+PyQt6-sip
+requests

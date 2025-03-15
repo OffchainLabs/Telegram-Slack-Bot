@@ -7,7 +7,7 @@ from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)  # ✅ Force reload the .env file
 
 # Telegram Credentials
 TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
