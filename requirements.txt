@@ -12,3 +12,4 @@ rsa
 slack_sdk
 Telethon
 urllib3
+notion-client
