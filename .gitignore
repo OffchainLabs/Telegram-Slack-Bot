@@ -8,3 +8,7 @@ my_account.session-journal
 *.session
 telegram_groups.txt
 venv/
+build/
+dist/
+pkg-root/
+TelegramSlackApp.pkg

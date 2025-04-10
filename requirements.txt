@@ -1,6 +1,5 @@
 certifi
 charset-normalizer
-dotenv
 idna
 pyaes
 pyasn1
@@ -13,3 +12,4 @@ slack_sdk
 Telethon
 urllib3
 notion-client
+qasync
