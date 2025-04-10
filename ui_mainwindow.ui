@@ -20,8 +20,8 @@
    <widget class="QPlainTextEdit" name="plainTextEdit">
     <property name="geometry">
      <rect>
-      <x>160</x>
-      <y>480</y>
+      <x>140</x>
+      <y>440</y>
       <width>671</width>
       <height>341</height>
      </rect>
@@ -30,8 +30,8 @@
    <widget class="QPushButton" name="pushButton">
     <property name="geometry">
      <rect>
-      <x>300</x>
-      <y>840</y>
+      <x>260</x>
+      <y>790</y>
       <width>121</width>
       <height>31</height>
      </rect>
@@ -43,8 +43,8 @@
    <widget class="QPushButton" name="pushButton_2">
     <property name="geometry">
      <rect>
-      <x>540</x>
-      <y>840</y>
+      <x>430</x>
+      <y>790</y>
       <width>121</width>
       <height>31</height>
      </rect>
@@ -53,24 +53,11 @@
      <string>Send to Slack</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_3">
-    <property name="geometry">
-     <rect>
-      <x>880</x>
-      <y>640</y>
-      <width>121</width>
-      <height>41</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Add image</string>
-    </property>
-   </widget>
    <widget class="QLabel" name="label">
     <property name="geometry">
      <rect>
-      <x>60</x>
-      <y>610</y>
+      <x>50</x>
+      <y>450</y>
       <width>81</width>
       <height>41</height>
      </rect>
@@ -343,6 +330,45 @@
     <property name="text">
      <string>Tags:</string>
     </property>
+   </widget>
+   <widget class="QPushButton" name="removeImageButton">
+    <property name="geometry">
+     <rect>
+      <x>850</x>
+      <y>600</y>
+      <width>119</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Remove Image</string>
+    </property>
+   </widget>
+   <widget class="QWidget" name="layoutWidget">
+    <property name="geometry">
+     <rect>
+      <x>850</x>
+      <y>550</y>
+      <width>228</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QPushButton" name="pushButton_3">
+       <property name="text">
+        <string>Add image</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="imageFileNameLabel">
+       <property name="text">
+        <string>No image selected!</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">

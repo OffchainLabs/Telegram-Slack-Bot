@@ -3,7 +3,7 @@ import asyncio
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, AuthRestartError
 from PyQt6 import QtWidgets
-from ui_mainwindow import Ui_MainWindow
+from ui_mainwindow import Ui_MainWindow  # Ensure this file is up-to-date from your .ui file
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from notion_client import Client  # Notion SDK
@@ -15,12 +15,11 @@ NOTION_DATABASE_ID = "1d001a3f59f881c09cf2fc79f57ac4ac"
 class App(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        
         # Load the UI
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         
-        # If present, initialize the login status label
+        # Optionally initialize a login status label (if present in UI)
         if hasattr(self.ui, "loginStatusLabel"):
             self.ui.loginStatusLabel.setText("Not logged in")
         
@@ -30,37 +29,69 @@ class App(QtWidgets.QMainWindow):
         self.ui.pushButton_3.clicked.connect(self.select_image)
         self.ui.useNotionCheckbox.stateChanged.connect(self.toggle_notion_mode)
         
-        # Default state: disable Notion fields
+        # Connect the Remove Image button if available
+        if hasattr(self.ui, "removeImageButton"):
+            self.ui.removeImageButton.clicked.connect(self.remove_image)
+            self.ui.removeImageButton.setVisible(False)   # Initially hidden
+        
+        # Disable Notion fields by default
         self.ui.notionTagSelector.setEnabled(False)
         self.ui.notionApiTokenInput.setEnabled(False)
         
         self.imagePath = None
         
-        # Create a lock to ensure only one telegram send task runs at a time
+        # Create a lock to ensure only one telegram sending task runs at a time.
         self._tg_lock = asyncio.Lock()
 
     def toggle_notion_mode(self):
         is_checked = self.ui.useNotionCheckbox.isChecked()
         self.ui.notionTagSelector.setEnabled(is_checked)
         self.ui.notionApiTokenInput.setEnabled(is_checked)
-        # Disable manual inputs when Notion mode is enabled
+        # When using Notion mode, disable manual input fields.
         self.ui.telegramGroupsInput.setEnabled(not is_checked)
         self.ui.telegramChannelsInput.setEnabled(not is_checked)
         self.ui.slackChannelsInput.setEnabled(not is_checked)
 
     def select_image(self):
+        # If an image is already selected, confirm if the user wants to change it.
+        if self.imagePath and hasattr(self.ui, "removeImageButton"):
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Change Image",
+                "An image is already selected. Do you want to change it?",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+            )
+            if reply == QtWidgets.QMessageBox.StandardButton.No:
+                return
+        
         file_dialog = QtWidgets.QFileDialog()
         file_path, _ = file_dialog.getOpenFileName(
             self, "Select Image", "", "Images (*.png *.jpg *.jpeg)"
         )
         if file_path:
             self.imagePath = file_path
-            self.ui.label.setText(f"Selected: {os.path.basename(file_path)}")
+            # Use the dedicated label if available, otherwise use a generic label
+            if hasattr(self.ui, "imageFileNameLabel"):
+                self.ui.imageFileNameLabel.setText(f"Selected: {os.path.basename(file_path)}")
+            else:
+                self.ui.label.setText(f"Selected: {os.path.basename(file_path)}")
+            if hasattr(self.ui, "removeImageButton"):
+                self.ui.removeImageButton.setVisible(True)
+
+    def remove_image(self):
+        """Clears the selected image and hides the Remove Image button."""
+        self.imagePath = None
+        if hasattr(self.ui, "imageFileNameLabel"):
+            self.ui.imageFileNameLabel.setText("No image selected.")
+        else:
+            self.ui.label.setText("No image selected.")
+        if hasattr(self.ui, "removeImageButton"):
+            self.ui.removeImageButton.setVisible(False)
 
     async def async_get_text(self, prompt: str) -> str:
         """
-        Creates and shows a QInputDialog non-blockingly.
-        Returns the text entered by the user (or an empty string if canceled).
+        Asynchronously displays a QInputDialog and returns the entered text.
+        This method avoids blocking the event loop.
         """
         dialog = QtWidgets.QInputDialog(self)
         dialog.setLabelText(prompt)
@@ -70,8 +101,6 @@ class App(QtWidgets.QMainWindow):
         future = loop.create_future()
 
         def finished(result):
-            # QDialog returns an int code; if accepted, retrieve text.
-            # Note: QInputDialog.textValue() returns the current text.
             future.set_result(dialog.textValue().strip())
             dialog.deleteLater()
 
@@ -89,10 +118,7 @@ class App(QtWidgets.QMainWindow):
     def get_telegram_groups_by_tags(self, notion_token, selected_tags):
         client_notion = Client(auth=notion_token)
         try:
-            tag_filters = [
-                {"property": "Tags", "multi_select": {"contains": tag}}
-                for tag in selected_tags
-            ]
+            tag_filters = [{"property": "Tags", "multi_select": {"contains": tag}} for tag in selected_tags]
             response = client_notion.databases.query(
                 database_id=NOTION_DATABASE_ID,
                 filter={
@@ -109,9 +135,7 @@ class App(QtWidgets.QMainWindow):
                     groups.append(rt[0]["plain_text"])
             return groups
         except Exception as e:
-            QtWidgets.QMessageBox.critical(
-                self, "Error", f"Failed to fetch groups from Notion: {e}"
-            )
+            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to fetch groups from Notion: {e}")
             return []
 
     async def send_message_telegram_async(self):
@@ -128,7 +152,7 @@ class App(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.critical(self, "Error", "Telegram API credentials are missing!")
                 return
 
-            # Prepare the session file path in the user's home directory.
+            # Prepare a session file in a dedicated folder in the user's home directory.
             session_dir = os.path.join(os.path.expanduser("~"), ".TelegramSlackApp")
             os.makedirs(session_dir, exist_ok=True)
             session_file = os.path.join(session_dir, "my_account.session")
@@ -142,8 +166,7 @@ class App(QtWidgets.QMainWindow):
                     QtWidgets.QMessageBox.critical(self, "Error", "Phone number is required!")
                     return
                 await client.send_code_request(phone)
-                # Wait a little longer to yield control and let Telethon finish its internal tasks
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(1.0)  # Yield control to allow Telethon's tasks to settle
                 code = await self.async_get_text("Enter the code sent to you:")
                 try:
                     await client.sign_in(phone, code)
@@ -151,20 +174,16 @@ class App(QtWidgets.QMainWindow):
                     pw = await self.async_get_text("Two-step verification is enabled. Enter your password:")
                     await client.sign_in(password=pw)
                 except AuthRestartError as e:
-                    QtWidgets.QMessageBox.critical(
-                        self, "Error", f"Authorization restarted, please try again: {e}"
-                    )
+                    QtWidgets.QMessageBox.critical(self, "Error", f"Authorization restarted, please try again: {e}")
                     return
                 except Exception as e:
                     QtWidgets.QMessageBox.critical(self, "Error", f"Failed to sign in: {e}")
                     return
                 if hasattr(self.ui, "loginStatusLabel"):
                     me = await client.get_me()
-                    self.ui.loginStatusLabel.setText(
-                        f"Logged in as: {me.first_name if me.first_name else me.username}"
-                    )
+                    self.ui.loginStatusLabel.setText(f"Logged in as: {me.first_name if me.first_name else me.username}")
 
-            # Determine how to get the group list.
+            # Determine Telegram groups: use Notion data if enabled, else manual input.
             if self.ui.useNotionCheckbox.isChecked():
                 notion_token = self.ui.notionApiTokenInput.text().strip()
                 selected_tags = [item.text() for item in self.ui.notionTagSelector.selectedItems()]
@@ -175,26 +194,30 @@ class App(QtWidgets.QMainWindow):
             group_ids = await self.get_group_ids(client, telegram_groups)
             recipients = telegram_channels + group_ids
 
+            success_list = []
+            error_list = []
             for recipient in recipients:
                 try:
                     if self.imagePath:
                         await client.send_file(recipient, self.imagePath, caption=message)
-                        QtWidgets.QMessageBox.information(
-                            self, "Success", f"Image + message sent to Telegram {recipient}"
-                        )
                     else:
                         await client.send_message(recipient, message)
-                        QtWidgets.QMessageBox.information(
-                            self, "Success", f"Message sent to Telegram {recipient}"
-                        )
+                    success_list.append(str(recipient))
                 except Exception as e:
-                    QtWidgets.QMessageBox.critical(
-                        self, "Error", f"Failed to send to {recipient}: {e}"
-                    )
+                    error_list.append(f"{recipient}: {e}")
+
+            # Show one message dialog for successes and one for errors (if any)
+            if success_list:
+                QtWidgets.QMessageBox.information(
+                    self, "Success", "Telegram message sent to:\n" + ", ".join(success_list)
+                )
+            if error_list:
+                QtWidgets.QMessageBox.critical(
+                    self, "Error", "Failed to send Telegram message to:\n" + "\n".join(error_list)
+                )
             await client.disconnect()
 
     def send_message_telegram(self):
-        # Schedule the Telegram coroutine on the running event loop.
         asyncio.create_task(self.send_message_telegram_async())
 
     def send_message_slack(self):
@@ -210,16 +233,30 @@ class App(QtWidgets.QMainWindow):
             return
 
         client = WebClient(token=slack_bot_token)
+        success_channels = []
+        error_messages = []
         for channel in slack_channels:
             try:
-                response = client.chat_postMessage(channel=channel, text=message)
-                QtWidgets.QMessageBox.information(
-                    self, "Success", f"Message sent to Slack {channel}"
-                )
+                if self.imagePath:
+                    response = client.files_upload(
+                        channels=channel,
+                        file=self.imagePath,
+                        title=message,
+                        initial_comment=message,
+                    )
+                else:
+                    response = client.chat_postMessage(channel=channel, text=message)
+                success_channels.append(channel)
             except SlackApiError as e:
-                QtWidgets.QMessageBox.critical(
-                    self, "Error", f"Failed to send to Slack {channel}: {e.response['error']}"
-                )
+                error_messages.append(f"{channel}: {e.response['error']}")
+        if success_channels:
+            QtWidgets.QMessageBox.information(
+                self, "Success", "Slack message sent to channels: " + ", ".join(success_channels)
+            )
+        if error_messages:
+            QtWidgets.QMessageBox.critical(
+                self, "Error", "Failed to send Slack message to:\n" + "\n".join(error_messages)
+            )
 
 if __name__ == "__main__":
     import qasync
