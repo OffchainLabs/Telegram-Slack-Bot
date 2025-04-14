@@ -12,3 +12,4 @@ build/
 dist/
 pkg-root/
 TelegramSlackApp.pkg
+.eggs/
