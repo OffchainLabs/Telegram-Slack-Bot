@@ -282,41 +282,6 @@
     <property name="selectionMode">
      <enum>QAbstractItemView::SelectionMode::MultiSelection</enum>
     </property>
-    <item>
-     <property name="text">
-      <string>Validators</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>RPCs</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>RaaSes</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>Exchanges</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>Apps</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>Wallets</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>Infra</string>
-     </property>
-    </item>
    </widget>
    <widget class="QLabel" name="label_10">
     <property name="geometry">
@@ -369,6 +334,19 @@
       </widget>
      </item>
     </layout>
+   </widget>
+   <widget class="QPushButton" name="loadTagsButton">
+    <property name="geometry">
+     <rect>
+      <x>370</x>
+      <y>300</y>
+      <width>161</width>
+      <height>32</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Load Tags from Notion</string>
+    </property>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
