@@ -20,16 +20,18 @@ Here's what the app looks like on macOS:
 
 | Section | Description |
 |--------|-------------|
-| **Telegram API / API Hash** | Required to authenticate with Telegram using [my.telegram.org](https://my.telegram.org) |
-| **Slack Token** | Your Slack bot token to send messages |
-| **Notion API Token** | Required if using tag-based targeting via Notion |
-| **Use Notion Groups** | Toggle to enable/disable Notion-based group/channel selection |
-| **Tags** | Select tags (fetched from Notion) to target specific channels/groups |
-| **Telegram Groups/Channels** | Manually list recipients (1 per line) if not using Notion |
-| **Slack Channels** | Same as above, for Slack |
-| **Text Field** | The message body |
-| **Add Image** | Attach image to be sent with the message |
-| **Send Buttons** | Send the message to Telegram and/or Slack |
+| **Telegram API & Hash** | Your Telegram API credentials (from [my.telegram.org](https://my.telegram.org)). Required for authentication. |
+| **Slack Token** | A Slack bot token used to send messages via Slack API. |
+| **Telegram Groups / Channels** | Text fields where you can list Telegram group names or channel IDs to send messages to. |
+| **Slack Channels** | List of Slack channels (e.g., `#general`, `#alerts`) to send messages to. |
+| **Use Notion groups instead of manual input** | Check this box to automatically pull and target Telegram/Slack groups based on category tags stored in your Notion database. |
+| **Notion API Token** | Your Notion integration token, used to authenticate and fetch tags/groups. |
+| **Tags (from Notion)** | A checklist that auto-populates with category tags fetched from your Notion database. Select multiple to filter groups/channels. |
+| **🔘 Load Tags from Notion** | Fetches tags from the connected Notion database and populates the tag list below. Use this after entering your Notion token. |
+| **Message Text** | Write your message here. It will be sent to the selected Telegram and Slack groups. |
+| **Add Image** | Optional — attach an image to include with the message. |
+| **Remove Image** | Appears after selecting an image; allows removal. |
+| **Send to Telegram / Slack** | Buttons to dispatch the message to your selected platforms. |
 
 ---
 
@@ -64,7 +66,7 @@ Make sure you have Python 3 and pip installed. The `.bat` script mirrors the bas
 
 ### 🍎 Option 3: Install on macOS via .pkg
 
-> Coming soon — generates a `.pkg` using `py2app` and `pkgbuild`.
+Generates a `.pkg` using `py2app` and `pkgbuild`. You can use ```TelegramSlackApp.pkg``` to install the app on Mac device.
 
 ---
 
