@@ -28,9 +28,8 @@ Here's what the app looks like on macOS:
 | **Notion API Token** | Your Notion integration token, used to authenticate and fetch tags/groups. |
 | **Tags (from Notion)** | A checklist that auto-populates with category tags fetched from your Notion database. Select multiple to filter groups/channels. |
 | **🔘 Load Tags from Notion** | Fetches tags from the connected Notion database and populates the tag list below. Use this after entering your Notion token. |
-| **Message Text** | Write your message here. It will be sent to the selected Telegram and Slack groups. |
-| **Add Image** | Optional — attach an image to include with the message. |
-| **Remove Image** | Appears after selecting an image; allows removal. |
+| **Notion Message Page URL** | Just copy paste the URL of the Notion page contains the message and image. |
+| **🔄 Load Content** | Giving the URL to the app, by clicking on this button you can see the message and image preview |
 | **Send to Telegram / Slack** | Buttons to dispatch the message to your selected platforms. |
 
 ---
@@ -85,6 +84,11 @@ To package the app as a `.pkg` installer for macOS:
    - Generate `component.plist`
    - Create final `.pkg` file using `pkgbuild`
 
+***We already have a script to create package after changing app or ui. You can bash script by this command:***
+```bash
+./build.sh
+```
+
 ---
 
 ## 🧠 Project Structure
@@ -115,7 +119,7 @@ TelegramSlackApp/
 
 ---
 
-## 💡 Notion Integration (Optional)
+## 💡 Notion Integration
 
 To use Notion-based message routing:
 
@@ -129,6 +133,7 @@ To use Notion-based message routing:
 | Category         | Multi-select (tags like "Exchanges", "Validators") |
 | Contact Name / Channel ID | Text (e.g., Telegram channel username or Slack channel ID) |
 
+4. To fetch message from Notion, you need to copy paste URL in the ```Use Notion groups instead of manual input``` field.
 ---
 
 ## 🛠️ Development
@@ -142,6 +147,6 @@ source venv/bin/activate  # or use your IDE’s interpreter
 Then run:
 
 ```bash
-python app.py
+./run_app.sh
 ```
 

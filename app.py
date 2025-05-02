@@ -1,339 +1,317 @@
-import os
-import asyncio
+#!/usr/bin/env python3
+# Telegram-Slack poster with Notion-page preview  •  2025-05 build
+import re, os, asyncio, tempfile, requests, urllib.request
+from urllib.parse import urlparse
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, AuthRestartError
-from PyQt6 import QtWidgets, QtCore
-from ui_mainwindow import Ui_MainWindow
+from PyQt6 import QtWidgets, QtCore, QtGui
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from notion_client import Client  # Notion SDK
-import qasync  # Integrates asyncio with the Qt event loop
+from notion_client import Client
+from ui_mainwindow import Ui_MainWindow
+import qasync
 
-# Your Notion DB ID (hardcoded)
+# ────────────────────────── constants ──────────────────────────
 NOTION_DATABASE_ID = "1d001a3f59f881c09cf2fc79f57ac4ac"
 
+# ----------------------------------------------------------------------
+# helper: download any URL into a safe-named temporary file
+# ----------------------------------------------------------------------
+def _download_temp_file(url: str) -> str:
+    """
+    Download *url* into a secure tmp file and return its local path.
+    The original name is trimmed so it never exceeds the 255-char macOS limit.
+    """
+    parsed = urlparse(url)
+    base   = parsed.path.split("/")[-1] or "file.bin"
+    # strip query / fragment
+    base   = base.split("?", 1)[0].split("#", 1)[0]
+    suffix = os.path.splitext(base)[1] or ".bin"
+
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    with urllib.request.urlopen(url) as resp, open(tmp_path, "wb") as out:
+        out.write(resp.read())
+    return tmp_path
+
+# ----------------------------------------------------------------------
+# helper: pull the 32-char page-ID from any Notion URL
+# ----------------------------------------------------------------------
+_PAGE_ID_RE = re.compile(r"[0-9a-fA-F]{32}")
+def extract_page_id(url: str) -> str | None:
+    tail = urlparse(url).path.split("/")[-1]
+    tail = tail.split("?", 1)[0].split("#", 1)[0]
+    if "-" in tail:
+        tail = tail.split("-")[-1]
+    m = _PAGE_ID_RE.fullmatch(tail)
+    return m.group(0) if m else None
+
+async def fetch_notion_content(token: str, page_url: str):
+    """
+    Return (plain-text, image_path) for the given Notion page.
+    The first image is downloaded via _download_temp_file().
+    """
+    page_id = extract_page_id(page_url)
+    if not page_id:
+        raise ValueError("Couldn’t parse a Notion page ID from that link 🤔")
+
+    nc = Client(auth=token)
+    txt_parts, img_local = [], None
+
+    for blk in nc.blocks.children.list(page_id)["results"]:
+        kind = blk["type"]
+
+        if kind in ("paragraph", "heading_1", "heading_2", "heading_3"):
+            rich = blk[kind]["rich_text"]
+            if rich:
+                txt_parts.append(rich[0]["plain_text"])
+
+        if kind == "image" and img_local is None:
+            src = (blk["image"]["file"]["url"]
+                   if blk["image"]["type"] == "file"
+                   else blk["image"]["external"]["url"])
+            img_local = _download_temp_file(src)
+
+    return "\n".join(txt_parts).strip(), img_local
+
+
+# ─────────────────────────── GUI class ───────────────────────────
 class App(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
+        self.ui = Ui_MainWindow(); self.ui.setupUi(self)
 
+        # ░░ status label ░░
         if hasattr(self.ui, "loginStatusLabel"):
             self.ui.loginStatusLabel.setText("Not logged in")
 
+        # ░░ preview wiring ░░
+        self.ui.previewButton.clicked.connect(
+            lambda: asyncio.create_task(self.load_preview()))
+        self.ui.previewPlainText.setReadOnly(True)
+        self.ui.imagePreviewLabel.clear()
+
+        # ░░ send buttons ░░
         self.ui.pushButton.clicked.connect(self.send_message_telegram)
         self.ui.pushButton_2.clicked.connect(self.send_message_slack)
-        self.ui.pushButton_3.clicked.connect(self.select_image)
+
+        # ░░ notion tag / mode ░░
         self.ui.useNotionCheckbox.stateChanged.connect(self.toggle_notion_mode)
-
-        if hasattr(self.ui, "removeImageButton"):
-            self.ui.removeImageButton.clicked.connect(self.remove_image)
-            self.ui.removeImageButton.setVisible(False)
-
+        self.ui.notionApiTokenInput.setEnabled(True)
         self.ui.notionTagSelector.setEnabled(False)
-        self.ui.notionApiTokenInput.setEnabled(False)
+        self.ui.notionApiTokenInput.editingFinished.connect(
+            self.load_notion_tags)
 
-        self.imagePath = None
+        # runtime holders
+        self.cachedText: str = ""
+        self.imagePath: str | None = None
         self._tg_lock = asyncio.Lock()
         self.tg_client = None
 
-        self.ui.notionApiTokenInput.editingFinished.connect(self.load_notion_tags)
-
+    # ───────────── tag selector ─────────────
     def load_notion_tags(self):
-        notion_token = self.ui.notionApiTokenInput.text().strip()
-        if not notion_token:
+        token = self.ui.notionApiTokenInput.text().strip()
+        if not token:
             return
         try:
-            client_notion = Client(auth=notion_token)
-            db = client_notion.databases.retrieve(database_id=NOTION_DATABASE_ID)
-            tags = db["properties"]["Category"]["multi_select"]["options"]
-
+            db = Client(auth=token).databases.retrieve(
+                database_id=NOTION_DATABASE_ID)
             self.ui.notionTagSelector.clear()
-            for tag in tags:
-                item = QtWidgets.QListWidgetItem(tag["name"])
-                item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(QtCore.Qt.CheckState.Unchecked)
-                self.ui.notionTagSelector.addItem(item)
+            for opt in db["properties"]["Category"]["multi_select"]["options"]:
+                it = QtWidgets.QListWidgetItem(opt["name"])
+                it.setFlags(it.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                it.setCheckState(QtCore.Qt.CheckState.Unchecked)
+                self.ui.notionTagSelector.addItem(it)
         except Exception as e:
-            print(f"[ERROR] Failed to load tags from Notion: {e}")
+            print("[TagLoad]", e)
 
     def toggle_notion_mode(self):
-        is_checked = self.ui.useNotionCheckbox.isChecked()
-        self.ui.notionTagSelector.setEnabled(is_checked)
-        self.ui.notionApiTokenInput.setEnabled(is_checked)
-        self.ui.telegramGroupsInput.setEnabled(not is_checked)
-        self.ui.telegramChannelsInput.setEnabled(not is_checked)
-        self.ui.slackChannelsInput.setEnabled(not is_checked)
+        """Checkbox only affects where channels/groups come from and
+        whether the tag selector is enabled – the token field is always on."""
+        on = self.ui.useNotionCheckbox.isChecked()
 
-    def select_image(self):
-        if self.imagePath and hasattr(self.ui, "removeImageButton"):
-            reply = QtWidgets.QMessageBox.question(
-                self,
-                "Change Image",
-                "An image is already selected. Do you want to change it?",
-                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
-            )
-            if reply == QtWidgets.QMessageBox.StandardButton.No:
-                return
-        file_dialog = QtWidgets.QFileDialog()
-        file_path, _ = file_dialog.getOpenFileName(self, "Select Image", "", "Images (*.png *.jpg *.jpeg)")
-        if file_path:
-            self.imagePath = file_path
-            if hasattr(self.ui, "imageFileNameLabel"):
-                self.ui.imageFileNameLabel.setText(f"Selected: {os.path.basename(file_path)}")
-            else:
-                self.ui.label.setText(f"Selected: {os.path.basename(file_path)}")
-            if hasattr(self.ui, "removeImageButton"):
-                self.ui.removeImageButton.setVisible(True)
+        # tag selector follows the checkbox
+        self.ui.notionTagSelector.setEnabled(on)
 
-    def remove_image(self):
-        self.imagePath = None
-        if hasattr(self.ui, "imageFileNameLabel"):
-            self.ui.imageFileNameLabel.setText("No image selected.")
+        # manual inputs are disabled only when Notion-groups mode is on
+        self.ui.telegramGroupsInput.setEnabled(not on)
+        self.ui.telegramChannelsInput.setEnabled(not on)
+        self.ui.slackChannelsInput.setEnabled(not on)
+
+    # ───────────── preview helpers ─────────────
+    async def load_preview(self):
+        url   = self.ui.notionPageUrlInput.text().strip()
+        token = self.ui.notionApiTokenInput.text().strip()
+
+        if not url:
+            QtWidgets.QMessageBox.warning(
+                self, "Missing URL", "Paste a Notion page link first."); return
+        try:
+            txt, img = await fetch_notion_content(token, url)
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(
+                self, "Fetch error", str(exc)); return
+
+        self.cachedText, self.imagePath = txt, img
+        self.ui.previewPlainText.setPlainText(txt or "[No text]")
+        if img:
+            pix = QtGui.QPixmap(img).scaled(
+                self.ui.imagePreviewLabel.size(),
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation)
+            self.ui.imagePreviewLabel.setPixmap(pix)
         else:
-            self.ui.label.setText("No image selected.")
-        if hasattr(self.ui, "removeImageButton"):
-            self.ui.removeImageButton.setVisible(False)
+            self.ui.imagePreviewLabel.clear()
 
-    async def async_get_text(self, prompt: str) -> str:
-        dialog = QtWidgets.QInputDialog(self)
-        dialog.setLabelText(prompt)
-        dialog.setWindowTitle("Login Required")
-        dialog.setModal(True)
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
+    async def prepare_content(self):
+        if self.cachedText or self.imagePath:
+            return self.cachedText, self.imagePath
+        url   = self.ui.notionPageUrlInput.text().strip()
+        token = self.ui.notionApiTokenInput.text().strip()
+        return await fetch_notion_content(token, url)
 
-        def finished(result):
-            future.set_result(dialog.textValue().strip())
-            dialog.deleteLater()
-
-        dialog.finished.connect(finished)
-        dialog.show()
-        return await future
-
-    async def get_group_ids(self, client, telegram_groups):
-        group_ids = []
-        async for dialog in client.iter_dialogs():
-            if dialog.is_group and dialog.name in telegram_groups:
-                group_ids.append(dialog.id)
-        return group_ids
-
-    def get_telegram_groups_by_tags(self, notion_token, selected_tags):
-        client_notion = Client(auth=notion_token)
-        try:
-            tag_filters = [
-                {"property": "Category", "multi_select": {"contains": tag}}
-                for tag in selected_tags
-            ]
-            response = client_notion.databases.query(
-                database_id=NOTION_DATABASE_ID,
-                filter={
-                    "and": [
-                        {"property": "Platform", "select": {"equals": "Telegram"}},
-                        {"or": tag_filters},
-                    ]
-                },
-            )
-            groups = []
-            for result in response["results"]:
-                contact_prop = result["properties"].get("Contact Name / Channel ID", {})
-                rt = contact_prop.get("rich_text", [])
-                if rt:
-                    groups.append(rt[0]["plain_text"])
-            return groups
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to fetch groups from Notion: {e}")
-            return []
-
-    def get_slack_channels_by_tags(self, notion_token, selected_tags):
-        client_notion = Client(auth=notion_token)
-        try:
-            tag_filters = [
-                {"property": "Category", "multi_select": {"contains": tag}}
-                for tag in selected_tags
-            ]
-            response = client_notion.databases.query(
-                database_id=NOTION_DATABASE_ID,
-                filter={
-                    "and": [
-                        {"property": "Platform", "select": {"equals": "Slack"}},
-                        {"or": tag_filters},
-                    ]
-                },
-            )
-            channels = []
-            for result in response["results"]:
-                contact_prop = result["properties"].get("Contact Name / Channel ID", {})
-                rt = contact_prop.get("rich_text", [])
-                if rt:
-                    channels.append(rt[0]["plain_text"])
-            return channels
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to fetch Slack channels from Notion: {e}")
-            return []
+    # ───────────── Telegram routines ─────────────
+    async def async_get_text(self, prompt):
+        dlg = QtWidgets.QInputDialog(self); dlg.setLabelText(prompt)
+        dlg.setModal(True); loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        dlg.finished.connect(lambda _: (fut.set_result(dlg.textValue().strip()),
+                                        dlg.deleteLater()))
+        dlg.show(); return await fut
 
     async def get_tg_client(self):
-        if self.tg_client is not None:
-            return self.tg_client
-
-        telegram_api_id = self.ui.telegramApiIdInput.text().strip()
-        telegram_api_hash = self.ui.telegramApiHashInput.text().strip()
-        if not telegram_api_id or not telegram_api_hash:
-            raise ValueError("Telegram API credentials are missing!")
-
-        session_dir = os.path.join(os.path.expanduser("~"), ".TelegramSlackApp")
-        os.makedirs(session_dir, exist_ok=True)
-        session_file = os.path.join(session_dir, "my_account.session")
-
-        client = TelegramClient(session_file, telegram_api_id, telegram_api_hash)
+        if self.tg_client: return self.tg_client
+        api_id  = self.ui.telegramApiIdInput.text().strip()
+        api_hash= self.ui.telegramApiHashInput.text().strip()
+        if not api_id or not api_hash:
+            raise ValueError("Telegram API credentials missing.")
+        sesdir = os.path.join(os.path.expanduser("~"), ".TelegramSlackApp")
+        os.makedirs(sesdir, exist_ok=True)
+        client = TelegramClient(
+            os.path.join(sesdir, "my_account.session"), api_id, api_hash)
         await client.connect()
-
-        client._update_loop_running = False
-        client._keepalive_loop_running = False
-
+        client._update_loop_running = client._keepalive_loop_running = False
         if not await client.is_user_authorized():
-            phone = await self.async_get_text("Enter your phone number (with country code):")
-            if not phone:
-                raise Exception("Phone number is required!")
-            await client.send_code_request(phone)
-            await asyncio.sleep(1.0)
-            code = await self.async_get_text("Enter the code sent to you:")
-            try:
-                await client.sign_in(phone, code)
+            phone = await self.async_get_text("Phone (with country code):")
+            if not phone: raise Exception("Phone required!")
+            await client.send_code_request(phone); await asyncio.sleep(1)
+            code = await self.async_get_text("Login code:")
+            try:     await client.sign_in(phone, code)
             except SessionPasswordNeededError:
-                pw = await self.async_get_text("Two-step verification is enabled. Enter your password:")
+                pw = await self.async_get_text("Password:")
                 await client.sign_in(password=pw)
-            except AuthRestartError as e:
-                raise Exception(f"Authorization restarted, please try again: {e}")
-            except Exception as e:
-                raise Exception(f"Failed to sign in: {e}")
-            if hasattr(self.ui, "loginStatusLabel"):
-                me = await client.get_me()
-                self.ui.loginStatusLabel.setText(f"Logged in as: {me.first_name if me.first_name else me.username}")
+        self.tg_client = client; return client
 
-        if hasattr(client, "_updates_task") and client._updates_task:
-            client._updates_task.cancel()
-        if hasattr(client, "_recv_loop") and client._recv_loop:
-            client._recv_loop.cancel()
+    async def get_group_ids(self, cli, names):
+        ids = []
+        async for d in cli.iter_dialogs():
+            if d.is_group and d.name in names: ids.append(d.id)
+        return ids
 
-        self.tg_client = client
-        return client
+    def _selected_tags(self):
+        return [self.ui.notionTagSelector.item(i).text()
+                for i in range(self.ui.notionTagSelector.count())
+                if self.ui.notionTagSelector.item(i).checkState()
+                   == QtCore.Qt.CheckState.Checked]
+
+    def get_telegram_groups_by_tags(self, tok, tags):
+        cli=Client(auth=tok); groups=[]
+        filt=[{"property":"Category","multi_select":{"contains":t}} for t in tags]
+        res=cli.databases.query(database_id=NOTION_DATABASE_ID,
+              filter={"and":[{"property":"Platform","select":{"equals":"Telegram"}},{"or":filt}]})
+        for r in res["results"]:
+            rt=r["properties"]["Contact Name / Channel ID"]["rich_text"]
+            if rt: groups.append(rt[0]["plain_text"])
+        return groups
 
     async def send_message_telegram_async(self):
         async with self._tg_lock:
             self.ui.pushButton.setEnabled(False)
-            success_list = []
-            error_list = []
-            client = None
             try:
-                message = self.ui.plainTextEdit.toPlainText().strip()
-                telegram_channels = self.ui.telegramChannelsInput.toPlainText().strip().split("\n")
-                if not message:
-                    QtWidgets.QMessageBox.warning(self, "Warning", "Message cannot be empty!")
-                    return
+                txt, img = await self.prepare_content()
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self,"Error",str(e)); return
+            if not txt and not img:
+                QtWidgets.QMessageBox.warning(self,"Empty","Nothing to send."); return
 
+            client = await self.get_tg_client()
+            ch_manual = self.ui.telegramChannelsInput.toPlainText().strip().split("\n")
+            if self.ui.useNotionCheckbox.isChecked():
+                grps = self.get_telegram_groups_by_tags(
+                    self.ui.notionApiTokenInput.text().strip(), self._selected_tags())
+            else:
+                grps = self.ui.telegramGroupsInput.toPlainText().strip().split("\n")
+
+            ids = await self.get_group_ids(client, grps)
+            recipients = [r.strip() if isinstance(r,str) else r
+                          for r in (ch_manual + ids)
+                          if (r if isinstance(r,int) else r.strip())]
+
+            ok, bad = [], []
+            for r in recipients:
                 try:
-                    client = await self.get_tg_client()
+                    if img: await client.send_file(r, img, caption=txt or None)
+                    else:   await client.send_message(r, txt)
+                    ok.append(str(r))
                 except Exception as e:
-                    QtWidgets.QMessageBox.critical(self, "Error", str(e))
-                    return
+                    bad.append(f"{r}: {e}")
 
-                if self.ui.useNotionCheckbox.isChecked():
-                    notion_token = self.ui.notionApiTokenInput.text().strip()
-                    selected_tags = [
-                        self.ui.notionTagSelector.item(i).text()
-                        for i in range(self.ui.notionTagSelector.count())
-                        if self.ui.notionTagSelector.item(i).checkState() == QtCore.Qt.CheckState.Checked
-                    ]
-                    telegram_groups = self.get_telegram_groups_by_tags(notion_token, selected_tags)
-                else:
-                    telegram_groups = self.ui.telegramGroupsInput.toPlainText().strip().split("\n")
-
-                group_ids = await self.get_group_ids(client, telegram_groups)
-                recipients = [
-                    r.strip() if isinstance(r, str) else r
-                    for r in (telegram_channels + group_ids)
-                    if (r if isinstance(r, int) else r.strip())
-                ]
-                for recipient in recipients:
-                    try:
-                        if self.imagePath:
-                            await client.send_file(recipient, self.imagePath, caption=message)
-                        else:
-                            await client.send_message(recipient, message)
-                        success_list.append(str(recipient))
-                    except Exception as e:
-                        error_list.append(f"{recipient}: {e}")
-
-                if success_list:
-                    QtWidgets.QMessageBox.information(self, "Success", "Telegram message sent to:\n" + ", ".join(success_list))
-                if error_list:
-                    QtWidgets.QMessageBox.critical(self, "Error", "Failed to send Telegram message to:\n" + "\n".join(error_list))
-            finally:
-                self.ui.pushButton.setEnabled(True)
-                await asyncio.sleep(0.1)
+            if ok:  QtWidgets.QMessageBox.information(self,"Telegram",", ".join(ok))
+            if bad: QtWidgets.QMessageBox.critical(self,"Errors","\n".join(bad))
+            self.ui.pushButton.setEnabled(True)
 
     def send_message_telegram(self):
         asyncio.create_task(self.send_message_telegram_async())
 
-    def send_message_slack(self):
-        message = self.ui.plainTextEdit.toPlainText().strip()
-        slack_bot_token = self.ui.slackBotTokenInput.text().strip()
+    # ───────────── Slack routines ─────────────
+    def get_slack_channels_by_tags(self, tok, tags):
+        cli=Client(auth=tok); chans=[]
+        filt=[{"property":"Category","multi_select":{"contains":t}} for t in tags]
+        res=cli.databases.query(database_id=NOTION_DATABASE_ID,
+              filter={"and":[{"property":"Platform","select":{"equals":"Slack"}},{"or":filt}]})
+        for r in res["results"]:
+            rt=r["properties"]["Contact Name / Channel ID"]["rich_text"]
+            if rt: chans.append(rt[0]["plain_text"])
+        return chans
 
-        if self.ui.useNotionCheckbox.isChecked():
-            notion_token = self.ui.notionApiTokenInput.text().strip()
-            selected_tags = [
-                self.ui.notionTagSelector.item(i).text()
-                for i in range(self.ui.notionTagSelector.count())
-                if self.ui.notionTagSelector.item(i).checkState() == QtCore.Qt.CheckState.Checked
-            ]
-            slack_channels = self.get_slack_channels_by_tags(notion_token, selected_tags)
-        else:
-            slack_channels = self.ui.slackChannelsInput.toPlainText().strip().split("\n")
+    async def _send_slack(self):
+        try: txt, img = await self.prepare_content()
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self,"Error",str(e)); return
+        token = self.ui.slackBotTokenInput.text().strip()
+        if not token:
+            QtWidgets.QMessageBox.critical(self,"Missing","Slack bot token"); return
 
-        if not message:
-            QtWidgets.QMessageBox.warning(self, "Warning", "Message cannot be empty!")
-            return
-        if not slack_bot_token:
-            QtWidgets.QMessageBox.critical(self, "Error", "Slack bot token is missing!")
-            return
+        chans = (self.get_slack_channels_by_tags(
+                    self.ui.notionApiTokenInput.text().strip(),
+                    self._selected_tags())
+                 if self.ui.useNotionCheckbox.isChecked()
+                 else self.ui.slackChannelsInput.toPlainText().strip().split("\n"))
 
-        client = WebClient(token=slack_bot_token)
-        success_channels = []
-        error_messages = []
-        for channel in slack_channels:
+        cli = WebClient(token=token)
+        ok, bad = [], []
+        for c in chans:
             try:
-                if self.imagePath:
-                    client.files_upload(
-                        channels=channel,
-                        file=self.imagePath,
-                        title=message,
-                        initial_comment=message,
-                    )
+                if img:
+                    cli.files_upload(channels=c, file=img,
+                                     title=txt or "Image", initial_comment=txt or "")
                 else:
-                    client.chat_postMessage(channel=channel, text=message)
-                success_channels.append(channel)
+                    cli.chat_postMessage(channel=c, text=txt)
+                ok.append(c)
             except SlackApiError as e:
-                error_messages.append(f"{channel}: {e.response['error']}")
-        if success_channels:
-            QtWidgets.QMessageBox.information(self, "Success", "Slack message sent to channels: " + ", ".join(success_channels))
-        if error_messages:
-            QtWidgets.QMessageBox.critical(self, "Error", "Failed to send Slack message to:\n" + "\n".join(error_messages))
+                bad.append(f"{c}: {e.response['error']}")
 
+        if ok:  QtWidgets.QMessageBox.information(self,"Slack",", ".join(ok))
+        if bad: QtWidgets.QMessageBox.critical(self,"Errors","\n".join(bad))
+
+    def send_message_slack(self):
+        asyncio.run_coroutine_threadsafe(self._send_slack(),
+                                         asyncio.get_event_loop())
+
+
+# ───────────────────────── main ─────────────────────────
 if __name__ == "__main__":
-    app = QtWidgets.QApplication([])
-    loop = qasync.QEventLoop(app)
-    asyncio.set_event_loop(loop)
-
-    def handle_exception(loop, context):
-        exception = context.get("exception")
-        if exception and "Cannot enter into task" in str(exception):
-            print("Ignored reentrancy error:", exception)
-        else:
-            loop.default_exception_handler(context)
-
-    loop.set_exception_handler(handle_exception)
-    window = App()
-    window.show()
-    with loop:
-        loop.run_forever()
+    qtapp = QtWidgets.QApplication([])
+    loop = qasync.QEventLoop(qtapp); asyncio.set_event_loop(loop)
+    window = App(); window.show()
+    with loop: loop.run_forever()
