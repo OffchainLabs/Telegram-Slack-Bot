@@ -3,27 +3,28 @@ echo 🚀 Setting up Telegram & Slack Messenger App...
 
 :: ✅ Check if Python is installed
 where python >nul 2>nul
-if %errorlevel% neq 0 (
-    echo ❌ Python3 is not installed. Please install Python3 manually.
+if %ERRORLEVEL% NEQ 0 (
+    echo ❌ Python is not installed. Please install Python 3 from https://www.python.org/
     pause
-    exit /b
+    exit /b 1
 )
 
 :: ✅ Create virtual environment if not exists
-if not exist "venv" (
-    echo 📦 Creating virtual environment...
+if not exist venv (
+    echo 📦 Creating a virtual environment...
     python -m venv venv
 )
 
 :: ✅ Activate virtual environment
-call venv\Scripts\activate
+call venv\Scripts\activate.bat
 
 :: ✅ Install dependencies
 echo 📦 Installing dependencies...
-pip install --upgrade pip
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 
 :: ✅ Run the app
 echo 🚀 Running TelegramSlackApp...
 python app.py
+
 pause
